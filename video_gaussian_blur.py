@@ -2,10 +2,48 @@ import cv2
 import numpy as np
 import argparse
 import os
+import shutil
+import subprocess
+import tempfile
 import time
 
 
 SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'}
+
+
+def mux_original_audio(input_path, video_only_path, output_path):
+    """
+    使用 ffmpeg 将原视频的音频流合并回处理后的视频。
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        print("警告: 未找到 ffmpeg，输出文件将不包含原始音频。")
+        os.replace(video_only_path, output_path)
+        return
+
+    command = [
+        ffmpeg,
+        "-y",
+        "-i", video_only_path,
+        "-i", input_path,
+        "-map", "0:v:0",
+        "-map", "1:a?",
+        "-c:v", "copy",
+        "-c:a", "copy",
+        "-shortest",
+        output_path,
+    ]
+
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as exc:
+        print("警告: 音频合并失败，输出文件将不包含原始音频。")
+        stderr = exc.stderr.decode("utf-8", errors="replace").strip()
+        if stderr:
+            print(stderr)
+        os.replace(video_only_path, output_path)
+    else:
+        os.remove(video_only_path)
 
 
 def add_gaussian_keypoints(frame, num_points=50, blur_kernel=21, point_radius=8):
@@ -71,6 +109,10 @@ def process_video(input_path, output_path, num_points=50, blur_kernel=21, point_
         blur_kernel: 高斯模糊核大小
         point_radius: 特征点半径
     """
+    if os.path.abspath(input_path) == os.path.abspath(output_path):
+        print("输出文件不能和输入文件相同，否则会覆盖原始音频来源。")
+        return False
+
     cap = cv2.VideoCapture(input_path)
 
     if not cap.isOpened():
@@ -82,11 +124,23 @@ def process_video(input_path, output_path, num_points=50, blur_kernel=21, point_
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    output_dir = os.path.dirname(os.path.abspath(output_path)) or "."
+    output_ext = os.path.splitext(output_path)[1] or ".mp4"
+    temp_file = tempfile.NamedTemporaryFile(
+        prefix=".gaussian_blur_video_only_",
+        suffix=output_ext,
+        dir=output_dir,
+        delete=False,
+    )
+    temp_video_path = temp_file.name
+    temp_file.close()
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    out = cv2.VideoWriter(temp_video_path, fourcc, fps, (width, height))
 
     if not out.isOpened():
         cap.release()
+        os.remove(temp_video_path)
         print(f"无法创建输出视频文件: {output_path}")
         return False
 
@@ -111,6 +165,7 @@ def process_video(input_path, output_path, num_points=50, blur_kernel=21, point_
 
     cap.release()
     out.release()
+    mux_original_audio(input_path, temp_video_path, output_path)
     print(f"处理完成! 输出文件: {output_path}")
     return True
 

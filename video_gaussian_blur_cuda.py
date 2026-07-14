@@ -1,5 +1,8 @@
 import argparse
 import os
+import shutil
+import subprocess
+import tempfile
 import time
 
 import cv2
@@ -7,6 +10,39 @@ import numpy as np
 
 
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+
+
+def mux_original_audio(input_path, video_only_path, output_path):
+    """Use ffmpeg to attach the original audio stream to the processed video."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        print("Warning: ffmpeg was not found; output will not include original audio.")
+        os.replace(video_only_path, output_path)
+        return
+
+    command = [
+        ffmpeg,
+        "-y",
+        "-i", video_only_path,
+        "-i", input_path,
+        "-map", "0:v:0",
+        "-map", "1:a?",
+        "-c:v", "copy",
+        "-c:a", "copy",
+        "-shortest",
+        output_path,
+    ]
+
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as exc:
+        print("Warning: audio muxing failed; output will not include original audio.")
+        stderr = exc.stderr.decode("utf-8", errors="replace").strip()
+        if stderr:
+            print(stderr)
+        os.replace(video_only_path, output_path)
+    else:
+        os.remove(video_only_path)
 
 
 def make_odd(value):
@@ -160,6 +196,10 @@ def process_video(
     device_id=0,
     force_cpu=False,
 ):
+    if os.path.abspath(input_path) == os.path.abspath(output_path):
+        print("Output file cannot be the same as input file because original audio must be preserved.")
+        return False
+
     cap = cv2.VideoCapture(input_path)
 
     if not cap.isOpened():
@@ -171,11 +211,23 @@ def process_video(
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    output_dir = os.path.dirname(os.path.abspath(output_path)) or "."
+    output_ext = os.path.splitext(output_path)[1] or ".mp4"
+    temp_file = tempfile.NamedTemporaryFile(
+        prefix=".gaussian_blur_video_only_",
+        suffix=output_ext,
+        dir=output_dir,
+        delete=False,
+    )
+    temp_video_path = temp_file.name
+    temp_file.close()
+
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    out = cv2.VideoWriter(temp_video_path, fourcc, fps, (width, height))
 
     if not out.isOpened():
         cap.release()
+        os.remove(temp_video_path)
         print(f"Could not create output video file: {output_path}")
         return False
 
@@ -217,6 +269,7 @@ def process_video(
 
     cap.release()
     out.release()
+    mux_original_audio(input_path, temp_video_path, output_path)
     print(f"Done. Output file: {output_path}")
     return True
 
