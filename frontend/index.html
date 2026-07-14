@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gaussian Blur Video Processor</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --surface-2: #eef2f6;
+        --text: #18202b;
+        --muted: #647184;
+        --line: #d7dee8;
+        --accent: #0f766e;
+        --accent-2: #b45309;
+        --danger: #b42318;
+        --success: #047857;
+        --shadow: 0 18px 45px rgba(24, 32, 43, 0.09);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .shell {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 32px 0 48px;
+      }
+
+      header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 12px 0 28px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(30px, 5vw, 54px);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .subhead {
+        max-width: 720px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-title {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+
+      .panel-body {
+        padding: 20px;
+      }
+
+      .dropzone {
+        display: grid;
+        place-items: center;
+        min-height: 270px;
+        border: 2px dashed #b8c3d1;
+        border-radius: 8px;
+        background: linear-gradient(180deg, #fbfcfd, #f3f6f9);
+        cursor: pointer;
+        transition:
+          border-color 160ms ease,
+          background 160ms ease,
+          transform 160ms ease;
+      }
+
+      .dropzone:hover,
+      .dropzone.dragging {
+        border-color: var(--accent);
+        background: #eefbf8;
+      }
+
+      .drop-inner {
+        padding: 24px;
+        text-align: center;
+      }
+
+      .upload-mark {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 16px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: #dff3ef;
+        color: var(--accent);
+        font-size: 28px;
+        font-weight: 700;
+      }
+
+      .drop-title {
+        margin: 0 0 8px;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .drop-copy,
+      .hint {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .file-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .file-row,
+      .result-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcfd;
+      }
+
+      .file-name {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        font-weight: 650;
+      }
+
+      .file-meta {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .controls {
+        display: grid;
+        gap: 20px;
+      }
+
+      .control {
+        display: grid;
+        gap: 8px;
+      }
+
+      .control-line {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+
+      label {
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      .value {
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--accent);
+      }
+
+      .checkline {
+        display: flex;
+        align-items: start;
+        gap: 12px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-2);
+      }
+
+      .number-input {
+        width: 88px;
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0 10px;
+        background: white;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 24px;
+      }
+
+      .button {
+        min-height: 44px;
+        border: 0;
+        border-radius: 8px;
+        padding: 0 16px;
+        cursor: pointer;
+        font-weight: 800;
+        transition:
+          transform 120ms ease,
+          opacity 120ms ease,
+          background 120ms ease;
+      }
+
+      .button:active {
+        transform: translateY(1px);
+      }
+
+      .button.primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      .button.secondary {
+        background: var(--surface-2);
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+
+      .button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+        transform: none;
+      }
+
+      .message {
+        display: none;
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fbfcfd;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .message.show {
+        display: block;
+      }
+
+      .message.error {
+        border-color: #f3b4ae;
+        background: #fff4f2;
+        color: var(--danger);
+      }
+
+      .message.success {
+        border-color: #9fd9c2;
+        background: #f0fdf7;
+        color: var(--success);
+      }
+
+      .results {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .download-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        padding: 0 12px;
+        border-radius: 8px;
+        background: var(--accent-2);
+        color: white;
+        text-decoration: none;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .failed {
+        color: var(--danger);
+        font-weight: 700;
+      }
+
+      .summary {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      @media (max-width: 860px) {
+        header {
+          align-items: start;
+          flex-direction: column;
+        }
+
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .file-row,
+        .result-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <div>
+          <h1>Gaussian Blur Video Processor</h1>
+          <p class="subhead">
+            Upload one or more videos, add Gaussian-blurred feature-point spots, then download the processed files.
+          </p>
+        </div>
+        <div class="status-pill" id="healthPill"><span class="dot"></span><span>Checking backend</span></div>
+      </header>
+
+      <main class="layout">
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Files</h2>
+            <p class="summary" id="fileCount">No files selected</p>
+          </div>
+          <div class="panel-body">
+            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose video files">
+              <div class="drop-inner">
+                <div class="upload-mark">+</div>
+                <p class="drop-title">Choose or drop videos here</p>
+                <p class="drop-copy">Supported: MP4, MOV, AVI, MKV, WEBM, M4V</p>
+              </div>
+            </div>
+            <input class="hidden" id="fileInput" type="file" accept="video/*" multiple />
+            <div class="file-list" id="fileList"></div>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Processing</h2>
+          </div>
+          <div class="panel-body">
+            <div class="controls">
+              <div class="control">
+                <div class="control-line">
+                  <label for="numPoints">Feature points</label>
+                  <span class="value" id="numPointsValue">50</span>
+                </div>
+                <input id="numPoints" type="range" min="1" max="300" value="50" />
+                <p class="hint">Higher values create more blurred spots per frame.</p>
+              </div>
+
+              <div class="control">
+                <div class="control-line">
+                  <label for="blurKernel">Blur kernel</label>
+                  <span class="value" id="blurKernelValue">21</span>
+                </div>
+                <input id="blurKernel" type="range" min="3" max="101" step="2" value="21" />
+                <p class="hint">Higher values create stronger blur. Odd values are required.</p>
+              </div>
+
+              <div class="control">
+                <div class="control-line">
+                  <label for="pointRadius">Point radius</label>
+                  <span class="value" id="pointRadiusValue">8 px</span>
+                </div>
+                <input id="pointRadius" type="range" min="1" max="80" value="8" />
+                <p class="hint">Controls the size of each blurred spot.</p>
+              </div>
+
+              <div class="checkline">
+                <input id="useCuda" type="checkbox" />
+                <div>
+                  <label for="useCuda">Try CUDA processor</label>
+                  <p class="hint">Requires an NVIDIA GPU and an OpenCV build compiled with CUDA.</p>
+                </div>
+              </div>
+
+              <div class="control" id="cudaOptions" style="display: none">
+                <div class="control-line">
+                  <label for="deviceId">CUDA device</label>
+                  <input class="number-input" id="deviceId" type="number" min="0" value="0" />
+                </div>
+                <div class="checkline">
+                  <input id="forceCpu" type="checkbox" />
+                  <div>
+                    <label for="forceCpu">Force CPU fallback</label>
+                    <p class="hint">Useful for comparing timing against the CUDA script's CPU path.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="button primary" id="processButton" disabled>Process videos</button>
+              <button class="button secondary" id="clearButton" disabled>Clear</button>
+            </div>
+
+            <div class="message" id="message"></div>
+          </div>
+        </aside>
+      </main>
+
+      <section class="panel" style="margin-top: 20px">
+        <div class="panel-header">
+          <h2 class="panel-title">Results</h2>
+          <p class="summary" id="resultSummary">Processed files will appear here.</p>
+        </div>
+        <div class="panel-body">
+          <div class="results" id="results"></div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const state = {
+        files: [],
+        processing: false,
+      };
+
+      const dropzone = document.querySelector("#dropzone");
+      const fileInput = document.querySelector("#fileInput");
+      const fileList = document.querySelector("#fileList");
+      const fileCount = document.querySelector("#fileCount");
+      const processButton = document.querySelector("#processButton");
+      const clearButton = document.querySelector("#clearButton");
+      const message = document.querySelector("#message");
+      const results = document.querySelector("#results");
+      const resultSummary = document.querySelector("#resultSummary");
+      const healthPill = document.querySelector("#healthPill");
+      const numPoints = document.querySelector("#numPoints");
+      const blurKernel = document.querySelector("#blurKernel");
+      const pointRadius = document.querySelector("#pointRadius");
+      const numPointsValue = document.querySelector("#numPointsValue");
+      const blurKernelValue = document.querySelector("#blurKernelValue");
+      const pointRadiusValue = document.querySelector("#pointRadiusValue");
+      const useCuda = document.querySelector("#useCuda");
+      const forceCpu = document.querySelector("#forceCpu");
+      const deviceId = document.querySelector("#deviceId");
+      const cudaOptions = document.querySelector("#cudaOptions");
+
+      function formatBytes(bytes) {
+        if (!bytes) return "0 B";
+        const units = ["B", "KB", "MB", "GB"];
+        const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+      }
+
+      function showMessage(text, type = "") {
+        message.textContent = text;
+        message.className = `message show ${type}`;
+      }
+
+      function hideMessage() {
+        message.textContent = "";
+        message.className = "message";
+      }
+
+      function renderFiles() {
+        fileList.innerHTML = "";
+        fileCount.textContent = state.files.length
+          ? `${state.files.length} file${state.files.length === 1 ? "" : "s"} selected`
+          : "No files selected";
+
+        state.files.forEach((file) => {
+          const row = document.createElement("div");
+          row.className = "file-row";
+          row.innerHTML = `
+            <div>
+              <div class="file-name">${file.name}</div>
+              <div class="file-meta">${formatBytes(file.size)} · ${file.type || "video file"}</div>
+            </div>
+            <div class="file-meta">Ready</div>
+          `;
+          fileList.appendChild(row);
+        });
+
+        processButton.disabled = state.processing || state.files.length === 0;
+        clearButton.disabled = state.processing || state.files.length === 0;
+      }
+
+      function setFiles(fileListValue) {
+        state.files = Array.from(fileListValue).filter((file) => file.type.startsWith("video/"));
+        hideMessage();
+        renderFiles();
+
+        if (!state.files.length) {
+          showMessage("No video files were selected.", "error");
+        }
+      }
+
+      function renderValues() {
+        numPointsValue.textContent = numPoints.value;
+        blurKernelValue.textContent = blurKernel.value;
+        pointRadiusValue.textContent = `${pointRadius.value} px`;
+        cudaOptions.style.display = useCuda.checked ? "grid" : "none";
+      }
+
+      async function checkHealth() {
+        try {
+          const response = await fetch("/api/health");
+          if (!response.ok) throw new Error("Backend health check failed");
+          healthPill.innerHTML = `<span class="dot"></span><span>Backend ready</span>`;
+        } catch (error) {
+          healthPill.innerHTML = `<span class="dot" style="background: var(--danger)"></span><span>Backend unavailable</span>`;
+        }
+      }
+
+      async function processVideos() {
+        if (!state.files.length || state.processing) return;
+
+        state.processing = true;
+        processButton.disabled = true;
+        clearButton.disabled = true;
+        processButton.textContent = "Processing...";
+        results.innerHTML = "";
+        resultSummary.textContent = "Processing uploaded videos.";
+        showMessage("Uploading and processing. Large videos can take a while.", "");
+
+        const formData = new FormData();
+        state.files.forEach((file) => formData.append("files", file));
+        formData.append("num_points", numPoints.value);
+        formData.append("blur_kernel", blurKernel.value);
+        formData.append("point_radius", pointRadius.value);
+        formData.append("use_cuda", useCuda.checked ? "true" : "false");
+        formData.append("force_cpu", forceCpu.checked ? "true" : "false");
+        formData.append("device_id", deviceId.value || "0");
+
+        try {
+          const response = await fetch("/api/process", {
+            method: "POST",
+            body: formData,
+          });
+          const payload = await response.json();
+
+          if (!response.ok) {
+            throw new Error(payload.detail || "Processing failed.");
+          }
+
+          renderResults(payload);
+          const average = payload.averageSeconds == null ? "n/a" : `${payload.averageSeconds}s`;
+          showMessage(
+            `Done. ${payload.successCount}/${payload.totalCount} succeeded. Average: ${average}.`,
+            payload.successCount ? "success" : "error",
+          );
+        } catch (error) {
+          resultSummary.textContent = "No completed results.";
+          showMessage(error instanceof Error ? error.message : "Processing failed.", "error");
+        } finally {
+          state.processing = false;
+          processButton.textContent = "Process videos";
+          renderFiles();
+        }
+      }
+
+      function renderResults(payload) {
+        results.innerHTML = "";
+        resultSummary.textContent = `${payload.successCount}/${payload.totalCount} processed successfully`;
+
+        payload.results.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "result-row";
+
+          const seconds = item.seconds == null ? "n/a" : `${item.seconds}s`;
+          const action = item.ok
+            ? `<a class="download-link" href="${item.downloadUrl}" download="${item.outputFilename}">Download</a>`
+            : `<span class="failed">Failed</span>`;
+
+          row.innerHTML = `
+            <div>
+              <div class="file-name">${item.originalFilename}</div>
+              <div class="file-meta">Time: ${seconds}${item.error ? ` · ${item.error}` : ""}</div>
+            </div>
+            ${action}
+          `;
+          results.appendChild(row);
+        });
+      }
+
+      dropzone.addEventListener("click", () => fileInput.click());
+      dropzone.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          fileInput.click();
+        }
+      });
+      dropzone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        dropzone.classList.add("dragging");
+      });
+      dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragging"));
+      dropzone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        dropzone.classList.remove("dragging");
+        setFiles(event.dataTransfer.files);
+      });
+      fileInput.addEventListener("change", (event) => setFiles(event.target.files));
+      processButton.addEventListener("click", processVideos);
+      clearButton.addEventListener("click", () => {
+        state.files = [];
+        fileInput.value = "";
+        results.innerHTML = "";
+        resultSummary.textContent = "Processed files will appear here.";
+        hideMessage();
+        renderFiles();
+      });
+
+      [numPoints, blurKernel, pointRadius, useCuda].forEach((input) => {
+        input.addEventListener("input", renderValues);
+      });
+
+      renderValues();
+      renderFiles();
+      checkHealth();
+    </script>
+  </body>
+</html>
